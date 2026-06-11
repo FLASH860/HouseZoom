@@ -1,6 +1,7 @@
 import { Image } from 'react-native';
 import React, {useRef, useState} from 'react';
 import { Linking } from 'react-native';
+import { PermissionsAndroid } from 'react-native';
 import {
   View,
   Text,
@@ -13,6 +14,7 @@ import {
   Modal,
 } from 'react-native';
 import MapView, {Marker} from 'react-native-maps';
+import Geolocation from '@react-native-community/geolocation';
 import WebView from 'react-native-webview';
 import {useEffect} from 'react';
 import {globeHtml} from './globehtml';
@@ -93,10 +95,82 @@ export default function App() {
 
   };
 
+  const zoomToLocation = (latitude: number, longitude: number) => {
+
+    if (globeMode) {
+
+      setTimeout(() => {
+        startCloudTransition();
+      }, 3000);
+
+      setTimeout(() => {
+
+        setGlobeMode(false);
+
+        setTimeout(() => {
+
+          mapRef.current?.animateToRegion(
+            {
+              latitude,
+              longitude,
+              latitudeDelta: 20,
+              longitudeDelta: 20,
+            },
+            0,
+          );
+
+          setTimeout(() => {
+
+            mapRef.current?.animateToRegion(
+              {
+                latitude,
+                longitude,
+                latitudeDelta: 0.0002,
+                longitudeDelta: 0.0002,
+              },
+              1500,
+            );
+
+          }, 50);
+
+        }, 100);
+
+      }, 4000);
+
+    } else {
+
+      mapRef.current?.animateToRegion(
+        {
+          latitude,
+          longitude,
+          latitudeDelta: 20,
+          longitudeDelta: 20,
+        },
+        1500,
+      );
+
+      setTimeout(() => {
+
+        mapRef.current?.animateToRegion(
+          {
+            latitude,
+            longitude,
+            latitudeDelta: 0.0002,
+            longitudeDelta: 0.0002,
+          },
+          2500,
+        );
+
+      }, 1600);
+
+    }
+
+  };
+
   const performSearch = async (query: string) => {
     try {
       const url =
-        `http://10.234.18.231:8080/search?query=${encodeURIComponent(query)}`;
+        `http://10.234.18.13:8080/search?query=${encodeURIComponent(query)}`;
 
       const response = await fetch(url);
       const text = await response.text();
@@ -228,7 +302,7 @@ export default function App() {
   const loadHistory = async () => {
     try {
       const response = await fetch(
-        'http://10.234.18.231:8080/history',
+        'http://10.234.18.13:8080/history',
       );
 
       const data = await response.json();
@@ -252,7 +326,7 @@ export default function App() {
       }
 
       await fetch(
-        `http://10.234.18.231:8080/addFavorite?place=${encodeURIComponent(search)}`
+        `http://10.234.18.13:8080/addFavorite?place=${encodeURIComponent(search)}`
       );
 
       Alert.alert('Saved to Favorites');
@@ -267,7 +341,7 @@ export default function App() {
   const loadFavorites = async () => {
     try {
       const response = await fetch(
-        'http://10.234.18.231:8080/favorites',
+        'http://10.234.18.13:8080/favorites',
       );
 
       const data = await response.json();
@@ -310,6 +384,51 @@ export default function App() {
       `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${customMarker.latitude},${customMarker.longitude}`;
 
     Linking.openURL(url);
+  };
+
+  const goToCurrentLocation = async () => {
+    try {
+
+      const granted = await PermissionsAndroid.request(
+        PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION
+      );
+
+      if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
+        Alert.alert('Location permission denied');
+        return;
+      }
+
+      Geolocation.getCurrentPosition(
+        position => {
+
+          const latitude = position.coords.latitude;
+          const longitude = position.coords.longitude;
+
+          setCustomMarker({
+            latitude,
+            longitude,
+          });
+
+          setTargetLat(latitude);
+          setTargetLng(longitude);
+
+          zoomToLocation(latitude, longitude);
+
+          
+
+        },
+        error => {
+          Alert.alert('Location Error', error.message);
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 15000,
+        }
+      );
+
+    } catch (err) {
+      Alert.alert('Error');
+    }
   };
 
   return (
@@ -386,6 +505,7 @@ export default function App() {
 
         <MapView
           ref={mapRef}
+          showsUserLocation={true}
           onPress={async(e) => {
             const coords = e.nativeEvent.coordinate;
 
@@ -402,7 +522,7 @@ export default function App() {
             );
             
             const response = await fetch(
-              `http://10.234.18.231:8080/reverseGeocode?lat=${coords.latitude}&lng=${coords.longitude}`
+              `http://10.234.18.13:8080/reverseGeocode?lat=${coords.latitude}&lng=${coords.longitude}`
             );
 
             const data = await response.json();
@@ -508,6 +628,37 @@ export default function App() {
           }}
         />
       )}
+
+      <Animated.View
+        style={{
+          position: 'absolute',
+          top: 135,
+          left: 10,
+        }}>
+
+        <TouchableOpacity
+          style={{
+            width: 65,
+            height: 65,
+            borderRadius: 32.5,
+            backgroundColor: '#2196F3',
+            justifyContent: 'center',
+            alignItems: 'center',
+            elevation: 8,
+          }}
+          onPress={goToCurrentLocation}>
+
+          <Text
+            style={{
+              fontSize: 24,
+            }}>
+            📍
+          </Text>
+
+        </TouchableOpacity>
+
+      </Animated.View>
+
       <Animated.View
         style={{
           position: 'absolute',
